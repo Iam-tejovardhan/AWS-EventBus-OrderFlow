@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ecommerce_event_backend
+  Sample SAM Template for ecommerce_event_backend
+
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 128
+    Runtime: nodejs20.x
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        STAGE: "Dev"
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  CustomEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: EcommerceEventBus
+
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: hello-world/
+      Handler: app.lambdaHandler
+      Events:
+        HelloWorld:
+          Type: Api
+          Properties:
+            Path: /hello
+            Method: get
+
+  OrderServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: order-service/
+      Handler: app.lambdaHandler
+      Events:
+        OrderServiceApi:
+          Type: Api
+          Properties:
+            Path: /order
+            Method: post
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/${CustomEventBus}
+
+  InventoryServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: inventory-service/
+      Handler: app.lambdaHandler
+      Events:
+        InventoryServiceApi:
+          Type: Api
+          Properties:
+            Path: /inventory
+            Method: get
+
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Orders
+      AttributeDefinitions:
+        - AttributeName: OrderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: OrderId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  CustomersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Customers
+      AttributeDefinitions:
+        - AttributeName: CustomerId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: CustomerId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  ProductsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Products
+      AttributeDefinitions:
+        - AttributeName: ProductId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ProductId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  InventoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Inventory
+      AttributeDefinitions:
+        - AttributeName: ProductId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ProductId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  OrderEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: !Ref CustomEventBus
+      EventPattern:
+        source:
+          - "ecommerce.order"
+        detail-type:
+          - "OrderPlaced"
+          - "OrderShipped"
+          - "OrderDelivered"
+          - "OrderCanceled"
+      State: "ENABLED"
+      Targets:
+        - Arn: !GetAtt InventoryServiceFunction.Arn
+          Id: "InventoryServiceTarget"
+
+  InventoryPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref InventoryServiceFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt OrderEventRule.Arn
+
+Outputs:
+  HelloWorldApi:
+    Description: API Gateway endpoint URL for Prod stage for Hello World function
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+
+  OrderServiceApi:
+    Description: API Gateway endpoint URL for Prod stage for Order Service function
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/order/"
+
+  HelloWorldFunction:
+    Description: Hello World Lambda Function ARN
+    Value: !GetAtt HelloWorldFunction.Arn
+
+  OrderServiceFunction:
+    Description: Order Service Lambda Function ARN
+    Value: !GetAtt OrderServiceFunction.Arn
+
+  InventoryServiceFunction:
+    Description: Inventory Service Lambda Function ARN
+    Value: !GetAtt InventoryServiceFunction.Arn
+
+  HelloWorldFunctionIamRole:
+    Description: Implicit IAM Role created for Hello World function
+    Value: !GetAtt HelloWorldFunctionRole.Arn
+
+  OrderServiceFunctionIamRole:
+    Description: Implicit IAM Role created for Order Service function
+    Value: !GetAtt OrderServiceFunctionRole.Arn
+
+  InventoryServiceFunctionIamRole:
+    Description: Implicit IAM Role created for Inventory Service function
+    Value: !GetAtt InventoryServiceFunctionRole.Arn
