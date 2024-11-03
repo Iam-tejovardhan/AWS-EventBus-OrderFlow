@@ -7,9 +7,8 @@ export const lambdaHandler = async (event, context) => {
     try {
         const orderDetails = event.detail;
         const detailType = event['detail-type'];
-        const { orderId, items, status } = orderDetails; 
+        const { orderId, items, orderStatus, customerId } = orderDetails; 
         logger.info("Processing event for order:", { orderId, detailType });
-
         // Step 1: Handle OrderPlaced - Insert data in Orders table and update Inventory
         if (detailType === "OrderPlaced") {
             // Insert order into Orders table
@@ -17,8 +16,9 @@ export const lambdaHandler = async (event, context) => {
                 TableName: process.env.ORDERS_TABLE,
                 Item: {
                     OrderId: orderId,
-                    Status: "Placed",
-                    ...orderDetails,
+                    OrderStatus: orderStatus,
+                    CustomerId:customerId,
+                    ...items
                 },
             };
             await dynamoDb.put(putOrderParams).promise();
@@ -27,7 +27,6 @@ export const lambdaHandler = async (event, context) => {
             // Update Inventory table for each item
             for (const item of items) {
                 const { productId, quantity } = item;
-
                 const updateInventoryParams = {
                     TableName: process.env.INVENTORY_TABLE,
                     Key: { ProductId: productId },
@@ -36,7 +35,6 @@ export const lambdaHandler = async (event, context) => {
                     ConditionExpression: "Quantity >= :quantity",
                     ReturnValues: "UPDATED_NEW",
                 };
-
                 try {
                     const updateResult = await dynamoDb.update(updateInventoryParams).promise();
                     logger.info(`Inventory updated for ProductId ${productId}:`, updateResult);
@@ -52,12 +50,12 @@ export const lambdaHandler = async (event, context) => {
             const updateOrderStatusParams = {
                 TableName: process.env.ORDERS_TABLE,
                 Key: { OrderId: orderId },
-                UpdateExpression: "SET Status = :status",
-                ExpressionAttributeValues: { ":status": status || detailType },
+                UpdateExpression: "SET OrderStatus = :status",
+                ExpressionAttributeValues: { ":status": orderStatus},
                 ReturnValues: "UPDATED_NEW",
             };
             await dynamoDb.update(updateOrderStatusParams).promise();
-            logger.info(`Order ${orderId} status updated to ${status || detailType}`);
+            logger.info(`Order ${orderId} status updated to ${orderStatus}`);
         }
 
         // Step 3: Handle OrderCanceled - Update Inventory and Order Status
@@ -66,17 +64,16 @@ export const lambdaHandler = async (event, context) => {
             const updateOrderStatusParams = {
                 TableName: process.env.ORDERS_TABLE,
                 Key: { OrderId: orderId },
-                UpdateExpression: "SET Status = :status",
-                ExpressionAttributeValues: { ":status": "Canceled" },
+                UpdateExpression: "SET OrderStatus = :status",
+                ExpressionAttributeValues: { ":status": orderStatus},
                 ReturnValues: "UPDATED_NEW",
             };
             await dynamoDb.update(updateOrderStatusParams).promise();
-            logger.info(`Order ${orderId} status updated to Canceled`);
+            logger.info(`Order ${orderId} status updated to ${orderStatus   }`);
 
             // Restore inventory for each item in the canceled order
             for (const item of items) {
                 const { productId, quantity } = item;
-
                 const updateInventoryParams = {
                     TableName: process.env.INVENTORY_TABLE,
                     Key: { ProductId: productId },
@@ -84,12 +81,10 @@ export const lambdaHandler = async (event, context) => {
                     ExpressionAttributeValues: { ":quantity": quantity },
                     ReturnValues: "UPDATED_NEW",
                 };
-
                 await dynamoDb.update(updateInventoryParams).promise();
                 logger.info(`Inventory restored for ProductId ${productId} by ${quantity}`);
             }
         }
-
         return {
             statusCode: 200,
             body: JSON.stringify({ message: `Processed ${detailType} event successfully` }),

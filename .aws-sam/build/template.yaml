@@ -13,6 +13,12 @@ Globals:
     Environment:
       Variables:
         STAGE: Dev
+        ORDERS_TABLE:
+          Ref: OrdersTable
+        INVENTORY_TABLE:
+          Ref: InventoryTable
+        CUSTOMER_TABLE:
+          Ref: CustomersTable
     LoggingConfig:
       LogFormat: JSON
 Resources:
@@ -20,6 +26,58 @@ Resources:
     Type: AWS::Events::EventBus
     Properties:
       Name: EcommerceEventBus
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Orders
+      AttributeDefinitions:
+      - AttributeName: OrderId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: OrderId
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+  CustomersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Customers
+      AttributeDefinitions:
+      - AttributeName: CustomerId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: CustomerId
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+  ProductsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Products
+      AttributeDefinitions:
+      - AttributeName: ProductId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: ProductId
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+  InventoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Inventory
+      AttributeDefinitions:
+      - AttributeName: ProductId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: ProductId
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
   HelloWorldFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -58,66 +116,23 @@ Resources:
     Properties:
       CodeUri: InventoryServiceFunction
       Handler: app.lambdaHandler
-      Events:
-        InventoryServiceApi:
-          Type: Api
-          Properties:
-            Path: /inventory
-            Method: get
+      Policies:
+      - Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:PutItem
+          - dynamodb:GetItem
+          - dynamodb:UpdateItem
+          - dynamodb:DeleteItem
+          Resource:
+          - Fn::GetAtt:
+            - OrdersTable
+            - Arn
+          - Fn::GetAtt:
+            - InventoryTable
+            - Arn
     Metadata:
       SamResourceId: InventoryServiceFunction
-  OrdersTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: Orders
-      AttributeDefinitions:
-      - AttributeName: OrderId
-        AttributeType: S
-      KeySchema:
-      - AttributeName: OrderId
-        KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 5
-        WriteCapacityUnits: 5
-  CustomersTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: ECustomers
-      AttributeDefinitions:
-      - AttributeName: CustomerId
-        AttributeType: S
-      KeySchema:
-      - AttributeName: CustomerId
-        KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 5
-        WriteCapacityUnits: 5
-  ProductsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: EProducts
-      AttributeDefinitions:
-      - AttributeName: ProductId
-        AttributeType: S
-      KeySchema:
-      - AttributeName: ProductId
-        KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 5
-        WriteCapacityUnits: 5
-  InventoryTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: EInventory
-      AttributeDefinitions:
-      - AttributeName: ProductId
-        AttributeType: S
-      KeySchema:
-      - AttributeName: ProductId
-        KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 5
-        WriteCapacityUnits: 5
   OrderEventRule:
     Type: AWS::Events::Rule
     Properties:

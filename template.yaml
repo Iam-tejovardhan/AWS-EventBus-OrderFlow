@@ -14,6 +14,9 @@ Globals:
     Environment:
       Variables:
         STAGE: "Dev"
+        ORDERS_TABLE: !Ref OrdersTable
+        INVENTORY_TABLE: !Ref InventoryTable
+        CUSTOMER_TABLE: !Ref CustomersTable
     LoggingConfig:
       LogFormat: JSON
 
@@ -22,48 +25,6 @@ Resources:
     Type: AWS::Events::EventBus
     Properties:
       Name: EcommerceEventBus
-
-  HelloWorldFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: hello-world/
-      Handler: app.lambdaHandler
-      Events:
-        HelloWorld:
-          Type: Api
-          Properties:
-            Path: /hello
-            Method: get
-
-  OrderServiceFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: order-service/
-      Handler: app.lambdaHandler
-      Events:
-        OrderServiceApi:
-          Type: Api
-          Properties:
-            Path: /order
-            Method: post
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - events:PutEvents
-              Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/${CustomEventBus}
-
-  InventoryServiceFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: inventory-service/
-      Handler: app.lambdaHandler
-      Events:
-        InventoryServiceApi:
-          Type: Api
-          Properties:
-            Path: /inventory
-            Method: get
 
   OrdersTable:
     Type: AWS::DynamoDB::Table
@@ -120,6 +81,53 @@ Resources:
       ProvisionedThroughput:
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
+
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: hello-world/
+      Handler: app.lambdaHandler
+      Events:
+        HelloWorld:
+          Type: Api
+          Properties:
+            Path: /hello
+            Method: get
+
+  OrderServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: order-service/
+      Handler: app.lambdaHandler
+      Events:
+        OrderServiceApi:
+          Type: Api
+          Properties:
+            Path: /order
+            Method: post
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/${CustomEventBus}
+
+  InventoryServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: inventory-service/
+      Handler: app.lambdaHandler
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+              Resource:
+                - !GetAtt OrdersTable.Arn
+                - !GetAtt InventoryTable.Arn
 
   OrderEventRule:
     Type: AWS::Events::Rule
